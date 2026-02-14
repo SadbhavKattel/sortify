@@ -1,0 +1,33 @@
+ 
+# Eclipse
+*.class
+*.project
+*.classpath
+.settings/
+.target/
+
+# Maven / Spring Boot
+target/
+*.jar
+*.war
+.mvn/
+mvnw
+mvnw.cmd
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# React Native (for teammate)
+**/node_modules/
+npm-debug.log
+yarn-error.log

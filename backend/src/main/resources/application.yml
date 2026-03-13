@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: sortify-backend
+  datasource:
+    url: jdbc:h2:file:./data/sortifydb;AUTO_SERVER=TRUE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: 8080
+
+sortify:
+  jwt:
+    secret: 9A3D3C6E5A$B8X2C39$L1O#K7A2F0!R3N5E6S8J@L0C2B9A1
+    expirationMs: 86400000 # 24 hours
+  providers:
+    gmail:
+      client-id: ${GMAIL_CLIENT_ID:mock-client-id}
+      client-secret: ${GMAIL_CLIENT_SECRET:mock-client-secret}
+
+logging:
+  level:
+    com.sortify: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG

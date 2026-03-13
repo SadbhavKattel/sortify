@@ -1,0 +1,13 @@
+package com.sortify.model;
+
+public enum UrgencyCategory {
+    SECURITY_ALERT,
+    FINANCIAL_ALERT,
+    ACADEMIC_TODAY,
+    WORK_TODAY,
+    TRAVEL_DISRUPTION,
+    APPOINTMENT_CHANGE,
+    IMMEDIATE_ACTION_NEEDED,
+    OTHER_URGENT,
+    NOT_URGENT
+}

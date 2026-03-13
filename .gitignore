@@ -7,7 +7,8 @@
 .target/
 
 # Maven / Spring Boot
-target/
+**/target/
+backend/.env
 *.jar
 *.war
 .mvn/
@@ -31,3 +32,20 @@ logs/
 **/node_modules/
 npm-debug.log
 yarn-error.log
+
+# Build outputs
+**/build/
+**/dist/
+**/out/
+.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Misc
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

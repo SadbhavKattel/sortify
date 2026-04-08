@@ -66,7 +66,7 @@ export default function SettingsScreen({ navigation }: any) {
         {/* Widget */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.subtext }]}>Home Screen Widget</Text>
-          <TouchableOpacity activeOpacity={0.8} onPress={() => Alert.alert('Add Widget', 'To add the Sortify widget:\n\n1. Go to your Home Screen\n2. Long press on an empty area\n3. Tap "Widgets"\n4. Find "Sortify" and drag it', [{ text: 'Got it!' }])}>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => Alert.alert('Add Widget', 'To add the Clairo widget:\n\n1. Go to your Home Screen\n2. Long press on an empty area\n3. Tap "Widgets"\n4. Find "Clairo" and drag it', [{ text: 'Got it!' }])}>
             <BlurView intensity={30} tint={colors.blurTint} style={[styles.actionCard, { backgroundColor: colors.blurBg }]}>
               <Text style={[styles.actionText, { color: colors.text }]}>Add Widget to Home Screen</Text>
             </BlurView>

@@ -3,75 +3,38 @@
  * 
  * First screen the user sees before connecting their Gmail.
  * Shows a 2x2 feature grid with styled icons (no emojis) that explains
- * what Sortify tracks: security alerts, travel, payments, appointments.
+ * what Clairo tracks: security alerts, travel, payments, appointments.
  * 
  * After tapping "Connect Gmail", uses native Google Sign-In (no browser)
  * to authenticate and get Gmail read access.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import { Feather } from '@expo/vector-icons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-// GCP Web Client ID — used by the native Google Sign-In SDK
-const WEB_CLIENT_ID = '290273149939-n5hk8svgf0puki2ddp4525ouk78aeqkd.apps.googleusercontent.com';
-GoogleSignin.configure({ webClientId: WEB_CLIENT_ID, scopes: ['https://www.googleapis.com/auth/gmail.readonly'], offlineAccess: true, forceCodeForRefreshToken: true });
-
-/* ─── Styled View-based icons (no emojis) ───
- * Each icon is built from nested Views with borders and shapes.
- * They use the accent red color to match the app's visual language.
- */
-
-// Padlock: rounded shackle on top, keyhole dot inside
-const LockIcon = ({ color }: { color: string }) => (
-  <View style={{ width: 24, height: 28, borderWidth: 2, borderColor: color, borderRadius: 4, marginTop: 4 }}>
-    <View style={{ width: 14, height: 10, borderWidth: 2, borderColor: color, borderRadius: 7, borderBottomWidth: 0, alignSelf: 'center', marginTop: -8 }} />
-    <View style={{ width: 4, height: 6, backgroundColor: color, borderRadius: 2, alignSelf: 'center', marginTop: 4 }} />
-  </View>
-);
-
-// Plane: triangle nose with a horizontal wing
-const PlaneIcon = ({ color }: { color: string }) => (
-  <View style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: 0, height: 0, borderLeftWidth: 12, borderLeftColor: color, borderTopWidth: 6, borderTopColor: 'transparent', borderBottomWidth: 6, borderBottomColor: 'transparent' }} />
-    <View style={{ width: 20, height: 2, backgroundColor: color, marginTop: -1 }} />
-  </View>
-);
-
-// Credit card: rectangle with a magnetic stripe
-const CardIcon = ({ color }: { color: string }) => (
-  <View style={{ width: 28, height: 20, borderWidth: 2, borderColor: color, borderRadius: 4, justifyContent: 'flex-start' }}>
-    <View style={{ width: '100%', height: 5, backgroundColor: color, marginTop: 3 }} />
-  </View>
-);
-
-// Calendar: header bar with three date dots below
-const CalendarIcon = ({ color }: { color: string }) => (
-  <View style={{ width: 24, height: 24, borderWidth: 2, borderColor: color, borderRadius: 4 }}>
-    <View style={{ width: '100%', height: 6, backgroundColor: color, borderTopLeftRadius: 2, borderTopRightRadius: 2 }} />
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 2, gap: 2, marginTop: 1 }}>
-      <View style={{ width: 4, height: 4, backgroundColor: color, borderRadius: 1 }} />
-      <View style={{ width: 4, height: 4, backgroundColor: color, borderRadius: 1 }} />
-      <View style={{ width: 4, height: 4, backgroundColor: color, borderRadius: 1 }} />
-    </View>
-  </View>
-);
-
-const featureIcons = [LockIcon, PlaneIcon, CardIcon, CalendarIcon];
-
-// The four categories Sortify watches for — shown as a 2x2 grid
 const features = [
-  { title: 'Security Alerts', sub: 'Fraud, breaches, password changes' },
-  { title: 'Travel Updates', sub: 'Cancellations, delays, gate changes' },
-  { title: 'Payments', sub: 'Failed charges, overdue bills' },
-  { title: 'Appointments', sub: 'Bookings, deadlines, reminders' },
+  { title: 'Security', sub: 'Breaches, password changes', icon: 'shield', iconColor: '#7A62EF', iconBg: '#EFEAFC' },
+  { title: 'Travel', sub: 'Delays, gate changes', icon: 'send', iconColor: '#387CF6', iconBg: '#E8F1FE' },
+  { title: 'Payments', sub: 'Failed charges, bills', icon: 'credit-card', iconColor: '#F5B02E', iconBg: '#FFF7E6' },
+  { title: 'Appointments', sub: 'Deadlines, reminders', icon: 'calendar', iconColor: '#30BB8A', iconBg: '#E6FAF1' },
 ];
 
 export default function OnboardingScreen({ navigation }: any) {
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+
+  useEffect(() => {
+    // Use the Android client from google-services.json for native sign-in.
+    // We only need Gmail access tokens in-app, not a server auth code.
+    GoogleSignin.configure({
+      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+      offlineAccess: false,
+    });
+  }, []);
 
   /**
    * Native Google Sign-In flow:
@@ -93,8 +56,7 @@ export default function OnboardingScreen({ navigation }: any) {
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) return;
       if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) { Alert.alert('Error', 'Google Play Services not available'); return; }
-      // Fall through to Feed with mock data if sign-in fails
-      navigation.replace('Feed');
+      Alert.alert('Sign-In Failed', `Error code: ${error.code}\nMessage: ${error.message}`);
     }
   };
 
@@ -103,31 +65,33 @@ export default function OnboardingScreen({ navigation }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.container}>
-        {/* Big bold app name + tagline */}
         <View style={styles.hero}>
-          <Text style={styles.title}>Sortify</Text>
+          <View style={styles.logoSquare}>
+            <Text style={styles.logoText}>C</Text>
+          </View>
+          <Text style={styles.title}>Clairo</Text>
           <Text style={styles.tagline}>What matters. Nothing else.</Text>
         </View>
 
-        {/* 2x2 feature grid — each card is a frosted glass BlurView */}
         <View style={styles.grid}>
           {features.map((f, i) => {
-            const Icon = featureIcons[i];
             return (
-              <BlurView key={i} intensity={40} tint="light" style={styles.featureCard}>
-                <View style={styles.iconWrap}><Icon color="#B83A2F" /></View>
+              <View key={i} style={styles.featureCard}>
+                <View style={[styles.iconWrap, { backgroundColor: f.iconBg }]}>
+                  <Feather name={f.icon as any} size={20} color={f.iconColor} />
+                </View>
                 <Text style={styles.featureTitle}>{f.title}</Text>
                 <Text style={styles.featureSub}>{f.sub}</Text>
-              </BlurView>
+              </View>
             );
           })}
         </View>
 
         {/* Main call-to-action */}
         <TouchableOpacity style={styles.button} onPress={handleGoogleSignIn} activeOpacity={0.8}>
-          <BlurView intensity={50} tint="light" style={styles.buttonBlur}>
+          <View style={styles.buttonInner}>
             <Text style={styles.buttonText}>Connect Gmail</Text>
-          </BlurView>
+          </View>
         </TouchableOpacity>
 
         {/* Quick privacy reassurance */}
@@ -138,18 +102,20 @@ export default function OnboardingScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#F0EBE3' },
+  bg: { flex: 1, backgroundColor: '#F9F9F9' },
   container: { flex: 1, padding: 24, justifyContent: 'space-between' },
-  hero: { marginTop: 60 },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 52, color: '#1A1A1A', letterSpacing: -2 },
-  tagline: { fontFamily: 'Inter_500Medium', fontSize: 18, color: '#6B6560', marginTop: 6, letterSpacing: -0.3 },
+  hero: { marginTop: 40 },
+  logoSquare: { width: 56, height: 56, backgroundColor: '#0A0A0A', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  logoText: { fontFamily: 'Inter_400Regular', fontSize: 26, color: '#ffffff' },
+  title: { fontFamily: 'Inter_600SemiBold', fontSize: 42, color: '#1A1A1A', letterSpacing: -1.5 },
+  tagline: { fontFamily: 'Inter_400Regular', fontSize: 18, color: '#8e8e8e', marginTop: 12, letterSpacing: -0.3 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginVertical: 10 },
-  featureCard: { width: '48%', borderRadius: 20, overflow: 'hidden', padding: 18, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)', backgroundColor: 'rgba(255,255,255,0.5)' },
-  iconWrap: { height: 36, justifyContent: 'center', marginBottom: 8 },
-  featureTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#1A1A1A', marginBottom: 4 },
-  featureSub: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#6B6560', lineHeight: 17 },
-  button: { borderRadius: 30, overflow: 'hidden' },
-  buttonBlur: { paddingVertical: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(184,58,47,0.12)' },
-  buttonText: { fontFamily: 'Inter_600SemiBold', color: '#B83A2F', fontSize: 18, letterSpacing: 0.5 },
+  featureCard: { width: '48%', borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: '#ececec', backgroundColor: '#ffffff' },
+  iconWrap: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  featureTitle: { fontFamily: 'Inter_500Medium', fontSize: 16, color: '#1A1A1A', marginBottom: 6 },
+  featureSub: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#8e8e8e', lineHeight: 16 },
+  button: { borderRadius: 30, overflow: 'hidden', backgroundColor: '#0f0f0f' },
+  buttonInner: { paddingVertical: 18, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { fontFamily: 'Inter_500Medium', color: '#ffffff', fontSize: 18, letterSpacing: 0 },
   privacy: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#9E9892', textAlign: 'center', marginTop: 14, marginBottom: 10 },
 });

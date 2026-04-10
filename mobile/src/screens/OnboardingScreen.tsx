@@ -10,12 +10,12 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import { Feather } from '@expo/vector-icons';
+import { Feather, AntDesign } from '@expo/vector-icons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
 
 const features = [
   { title: 'Security', sub: 'Breaches, password changes', icon: 'shield', iconColor: '#7A62EF', iconBg: '#EFEAFC' },
@@ -46,6 +46,9 @@ export default function OnboardingScreen({ navigation }: any) {
   const handleGoogleSignIn = async () => {
     try {
       await GoogleSignin.hasPlayServices();
+      try {
+        await GoogleSignin.signOut(); // Clear any stuck sessions before attempting
+      } catch (e) {}
       await GoogleSignin.signIn();
       const tokens = await GoogleSignin.getTokens();
 
@@ -65,12 +68,15 @@ export default function OnboardingScreen({ navigation }: any) {
   return (
     <View style={styles.bg}>
       <SafeAreaView style={styles.container}>
-        <View style={styles.hero}>
-          <View style={styles.logoSquare}>
-            <Text style={styles.logoText}>C</Text>
+        <View style={[styles.hero, { alignItems: 'center' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={{ width: 84, height: 84, borderRadius: 24, marginRight: -12, resizeMode: 'cover' }} 
+            />
+            <Text style={styles.title}>Clairo</Text>
           </View>
-          <Text style={styles.title}>Clairo</Text>
-          <Text style={styles.tagline}>What matters. Nothing else.</Text>
+          <Text style={[styles.tagline, { textAlign: 'center' }]}>What matters. Nothing else.</Text>
         </View>
 
         <View style={styles.grid}>
@@ -88,11 +94,12 @@ export default function OnboardingScreen({ navigation }: any) {
         </View>
 
         {/* Main call-to-action */}
-        <TouchableOpacity style={styles.button} onPress={handleGoogleSignIn} activeOpacity={0.8}>
-          <View style={styles.buttonInner}>
-            <Text style={styles.buttonText}>Connect Gmail</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity activeOpacity={0.8} style={styles.googleBtn} onPress={handleGoogleSignIn}>
+            <AntDesign name="google" size={24} color="#1A1A1A" />
+            <Text style={styles.googleBtnText}>Continue with Google</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Quick privacy reassurance */}
         <Text style={styles.privacy}>We only read subject lines. Never stored.</Text>
@@ -114,8 +121,8 @@ const styles = StyleSheet.create({
   iconWrap: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
   featureTitle: { fontFamily: 'Inter_500Medium', fontSize: 16, color: '#1A1A1A', marginBottom: 6 },
   featureSub: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#8e8e8e', lineHeight: 16 },
-  button: { borderRadius: 30, overflow: 'hidden', backgroundColor: '#0f0f0f' },
-  buttonInner: { paddingVertical: 18, alignItems: 'center', justifyContent: 'center' },
-  buttonText: { fontFamily: 'Inter_500Medium', color: '#ffffff', fontSize: 18, letterSpacing: 0 },
+  buttonContainer: { overflow: 'hidden', paddingHorizontal: 0, marginTop: 10 },
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#ececec', borderRadius: 30, height: 60, gap: 12 },
+  googleBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#1A1A1A' },
   privacy: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#9E9892', textAlign: 'center', marginTop: 14, marginBottom: 10 },
 });

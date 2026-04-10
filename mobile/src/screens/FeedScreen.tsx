@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, NativeModules, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { Feather } from '@expo/vector-icons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useTheme } from '../ThemeContext';
+import { analyzeEmailImportance, analyzeEmailDeadline, analyzeEmailAlert } from '../utils/emailAnalyzer';
 
 export default function FeedScreen({ navigation }: any) {
   const { colors, theme } = useTheme();
   const [emails, setEmails] = useState<any[]>([]);
+  const [readEmailIds, setReadEmailIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('All');
+  const [activeTab, setActiveTab] = useState('Important');
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchEmails();
+    setRefreshing(false);
+  };
   
   const [fontsLoaded] = useFonts({ 
     Inter_400Regular, 
@@ -23,7 +33,19 @@ export default function FeedScreen({ navigation }: any) {
   const fetchEmails = async () => {
     setLoading(true);
     try {
-      const { accessToken } = await GoogleSignin.getTokens();
+      const storedIdsStr = await AsyncStorage.getItem('readEmailIds');
+      const storedReadIds = storedIdsStr ? new Set<string>(JSON.parse(storedIdsStr)) : new Set<string>();
+      setReadEmailIds(storedReadIds);
+
+      let accessToken;
+      try {
+        const tokens = await GoogleSignin.getTokens();
+        accessToken = tokens.accessToken;
+      } catch(e) {
+        await GoogleSignin.signInSilently();
+        const tokens = await GoogleSignin.getTokens();
+        accessToken = tokens.accessToken;
+      }
       
       const query = encodeURIComponent('in:inbox category:primary is:important -category:promotions -category:social');
       const listResponse = await fetch(
@@ -57,28 +79,36 @@ export default function FeedScreen({ navigation }: any) {
           });
         }
         
-        const subjLower = subject.toLowerCase();
-        const snippetLower = (detailData.snippet || '').toLowerCase();
-        const textToAnalyze = subjLower + ' ' + snippetLower;
+        const impResult = analyzeEmailImportance(subject, senderName, detailData.snippet || '');
+        const deadlineResult = analyzeEmailDeadline(subject, detailData.snippet || '');
+        const alertResult = analyzeEmailAlert(subject, detailData.snippet || '');
         
-        const isAlert = textToAnalyze.match(/(alert|security|warning|fraud|breach|login|sign-in|unusual|failed|unauthorized)/i);
-        const isDeadline = textToAnalyze.match(/(deadline|due|reminder|action required|closing|ending|submit|expires|upcoming)/i);
-        
+        // Find highest priority category among the three to label the email
+        let currScore = -999;
         let urgencyReasons = 'Important';
-        let priorityLevel = 'High';
+        let priorityLevel = 'Med';
         
-        if (isAlert) {
+        if (alertResult.surface && alertResult.score > currScore) {
+          currScore = alertResult.score;
           urgencyReasons = 'Alert';
-          priorityLevel = 'High';
-        } else if (isDeadline) {
+          priorityLevel = alertResult.priority === 'high' ? 'High' : 'Medium';
+        }
+        if (deadlineResult.surface && deadlineResult.score > currScore) {
+          currScore = deadlineResult.score;
           urgencyReasons = 'Deadline';
-          priorityLevel = 'Due';
-        } else {
-          priorityLevel = 'Med';
-          if (subjLower.includes('google')) priorityLevel = 'High';
-          if (subjLower.includes('coms')) priorityLevel = 'High';
+          priorityLevel = deadlineResult.priority === 'high' ? 'High' : (deadlineResult.score > 30 ? 'Due' : 'Low');
+        }
+        if (impResult.surface && impResult.score > currScore) {
+          currScore = impResult.score;
+          urgencyReasons = 'Important';
+          priorityLevel = impResult.priority === 'high' ? 'High' : 'Med';
         }
 
+        // If none surfaced uniquely, drop the email
+        if (!alertResult.surface && !deadlineResult.surface && !impResult.surface) {
+          return null;
+        }
+        
         let receivedAt = dateHeader ? dateHeader.split(' ').slice(1, 4).join(' ') : 'Unknown';
 
         return {
@@ -89,26 +119,33 @@ export default function FeedScreen({ navigation }: any) {
           priorityLevel,
           snippet: detailData.snippet || '',
           receivedAt,
-          isUnread: detailData.labelIds ? detailData.labelIds.includes('UNREAD') : false
+          isUnread: !storedReadIds.has(msg.id.toString())
         };
       });
 
-      const fetchedEmails = await Promise.all(emailPromises);
-      setEmails(fetchedEmails);
+      const fetchedEmails = (await Promise.all(emailPromises)).filter(Boolean);
+      setEmails(fetchedEmails as any[]);
 
       try {
-        NativeModules.WidgetData?.setWidgetData(JSON.stringify(fetchedEmails.slice(0, 5)));
+        const importantEmails = fetchedEmails.filter((e: any) => e.urgencyReasons === 'Important');
+        NativeModules.WidgetData?.setWidgetData(JSON.stringify(importantEmails.slice(0, 3)));
       } catch (e) {
         console.log("Failed to sync widgets", e);
       }
       
-    } catch (error) {
-      console.log('Error fetching real emails, falling back to dummy data', error);
+    } catch (error: any) {
+      console.log('Error fetching real emails:', error);
       setEmails([
-        { id: 1, subject: 'Application update', senderName: 'Google Careers', urgencyReasons: 'Important', priorityLevel: 'High', snippet: 'Your application has moved to the next stage.', receivedAt: '10:24', isUnread: false },
-        { id: 2, subject: 'Document reminder', senderName: 'UTA Financial Aid', urgencyReasons: 'Deadline', priorityLevel: 'High', snippet: 'Submit your missing document before Friday.', receivedAt: '09:10', isUnread: true },
-        { id: 3, subject: 'Security alert on your account', senderName: 'GitHub', urgencyReasons: 'Alert', priorityLevel: 'Medium', snippet: 'A new sign-in was detected from a new ...', receivedAt: 'Yesterday', isUnread: true },
-        { id: 4, subject: 'Return window closes soon', senderName: 'Amazon', urgencyReasons: 'Reminder', priorityLevel: 'Low', snippet: '', receivedAt: 'Yesterday', isUnread: false },
+        { 
+          id: 1, 
+          subject: 'Local Error: ' + (error.message || 'Unknown Exception'), 
+          senderName: 'System Diagnostic', 
+          urgencyReasons: 'Important', 
+          priorityLevel: 'High', 
+          snippet: String(error) + ' | Check console.', 
+          receivedAt: 'Just Now', 
+          isUnread: false 
+        }
       ]);
     } finally {
       setLoading(false);
@@ -139,7 +176,7 @@ export default function FeedScreen({ navigation }: any) {
     return matchTab && matchSearch;
   });
 
-  const tabs = ['All', 'Important', 'Deadlines', 'Alerts'];
+  const tabs = ['Important', 'Deadlines', 'Alerts'];
 
   const getColors = (urgencyReason: string) => {
     if (urgencyReason === 'Alert') return { dot: '#EA4335', pillBg: '#FCE8E6', pillText: '#C5221F' };
@@ -147,8 +184,16 @@ export default function FeedScreen({ navigation }: any) {
     return { dot: '#6658EA', pillBg: '#EFEAFC', pillText: '#5944D7' };
   };
 
-  const handlePressEmail = (item: any) => {
+  const handlePressEmail = async (item: any) => {
     setEmails(prev => prev.map(e => e.id === item.id ? { ...e, isUnread: false } : e));
+    
+    try {
+      const newReadIds = new Set(readEmailIds);
+      newReadIds.add(item.id.toString());
+      setReadEmailIds(newReadIds);
+      await AsyncStorage.setItem('readEmailIds', JSON.stringify(Array.from(newReadIds)));
+    } catch (e) {}
+
     navigation.navigate('Detail', { email: item });
   };
 
@@ -186,7 +231,9 @@ export default function FeedScreen({ navigation }: any) {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: colors.subtext }]}>Tuesday, Apr 2</Text>
+            <Text style={[styles.greeting, { color: colors.subtext }]}>
+              {new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}
+            </Text>
             <Text style={[styles.title, { color: colors.text }]}>Priority Inbox</Text>
           </View>
           <TouchableOpacity style={[styles.iconCircle, { backgroundColor: colors.badgeBg }]}>
@@ -211,12 +258,22 @@ export default function FeedScreen({ navigation }: any) {
         {/* Dashboard Numbers */}
         <View style={styles.dashboard}>
           <View style={styles.dashBlock}>
-            <Text style={styles.dashCount}>4</Text>
-            <Text style={styles.dashLabel}>Need action</Text>
+            <View style={styles.dashTopRow}>
+               <View style={[styles.dashIcon, { backgroundColor: '#EFEAFC' }]}>
+                 <Feather name="check-square" size={16} color="#6658EA" />
+               </View>
+               <Text style={styles.dashCount}>{emails.filter(e => e.urgencyReasons === 'Important' && e.isUnread).length || 0}</Text>
+            </View>
+            <Text style={styles.dashLabel}>NEED ACTION</Text>
           </View>
           <View style={styles.dashBlock}>
-            <Text style={styles.dashCount}>2</Text>
-            <Text style={styles.dashLabel}>Deadlines</Text>
+            <View style={styles.dashTopRow}>
+               <View style={[styles.dashIcon, { backgroundColor: '#FCE8E6' }]}>
+                 <Feather name="clock" size={16} color="#ea4335" />
+               </View>
+               <Text style={styles.dashCount}>{emails.filter(e => e.urgencyReasons === 'Deadline' && e.isUnread).length || 0}</Text>
+            </View>
+            <Text style={styles.dashLabel}>DEADLINES</Text>
           </View>
         </View>
 
@@ -246,7 +303,7 @@ export default function FeedScreen({ navigation }: any) {
             data={filteredEmails} 
             renderItem={renderItem} 
             keyExtractor={item => item.id.toString()} 
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEmails} tintColor={colors.text} />} 
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />} 
             contentContainerStyle={styles.listContent} 
             showsVerticalScrollIndicator={false} 
           />
@@ -308,13 +365,35 @@ const styles = StyleSheet.create({
   dashBlock: {
     flex: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#ececec',
   },
-  dashLabel: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#a0a0a0' },
-  dashCount: { fontFamily: 'Inter_500Medium', fontSize: 24, color: '#1a1a1a', marginBottom: 4 },
+  dashTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dashIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashLabel: { 
+    fontFamily: 'Inter_500Medium', 
+    fontSize: 11, 
+    color: '#b3b3b3', 
+    letterSpacing: 1.5,
+  },
+  dashCount: { 
+    fontFamily: 'Inter_700Bold', 
+    fontSize: 32, 
+    color: '#0f0f0f' 
+  },
 
   chipRow: { height: 36, marginBottom: 16 },
   chipContent: { paddingHorizontal: 24, gap: 8 },

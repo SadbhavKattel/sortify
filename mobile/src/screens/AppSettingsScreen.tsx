@@ -11,14 +11,6 @@ export default function AppSettingsScreen() {
   const { theme, toggleTheme, colors } = useTheme();
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   
-  const [syncIdx, setSyncIdx] = useState(0);
-  const syncs = ["5 min", "15 min", "Manual"];
-  
-  const [privacyIdx, setPrivacyIdx] = useState(0);
-  const privacies = ["Secure", "Standard"];
-  
-  const [focusOn, setFocusOn] = useState(false);
-
   if (!fontsLoaded) return null;
 
   const RowItem = ({ icon, title, subtitle, value, onPress }: any) => (
@@ -53,10 +45,6 @@ export default function AppSettingsScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.list}>
             <RowItem icon="aperture" title="Appearance" subtitle="Minimal mode active" value={theme === 'light' ? 'Light' : 'Dark'} onPress={toggleTheme} />
-            <RowItem icon="refresh-cw" title="Sync frequency" subtitle="How often inbox refreshes" value={syncs[syncIdx]} onPress={() => setSyncIdx((syncIdx + 1) % syncs.length)} />
-            <RowItem icon="lock" title="Privacy" subtitle="Face ID and local protection" value={privacies[privacyIdx]} onPress={() => setPrivacyIdx((privacyIdx + 1) % privacies.length)} />
-            <RowItem icon="moon" title="Focus mode" subtitle="Reduce non-essential alerts" value={focusOn ? "On" : "Off"} onPress={() => setFocusOn(!focusOn)} />
-            <RowItem icon="shield" title="Permissions" subtitle="Notification and Gmail access" value="Granted" onPress={() => {}} />
           </View>
         </ScrollView>
       </SafeAreaView>

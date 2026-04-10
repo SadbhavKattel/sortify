@@ -1,14 +1,27 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useNavigation } from '@react-navigation/native';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useTheme } from '../ThemeContext';
 
 export default function ConnectedAccountsScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
+  const [userInfo, setUserInfo] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const currentUser = await GoogleSignin.getCurrentUser();
+        setUserInfo(currentUser?.user);
+      } catch(e) {}
+    };
+    fetchUser();
+  }, []);
+
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   if (!fontsLoaded) return null;
 
@@ -45,13 +58,10 @@ export default function ConnectedAccountsScreen() {
           <View style={styles.list}>
             <RowItem 
               icon="mail" 
-              title="Gmail" 
-              subtitle="pratik***@gmail.com" 
+              title="Google Account" 
+              subtitle={userInfo?.email || "Loading Google Profile..."} 
               rightElement={<View style={[styles.activePill, { backgroundColor: colors.text }]}><Text style={[styles.activePillText, { color: colors.bg }]}>Active</Text></View>} 
             />
-            <RowItem icon="check" title="Sync status" subtitle="Last synced just now" rightElement={<Text style={[styles.rowValue, { color: colors.subtext }]}>Healthy</Text>} />
-            <RowItem icon="shield" title="Access scope" subtitle="Read emails and metadata" rightElement={<Text style={[styles.rowValue, { color: colors.subtext }]}>Allowed</Text>} />
-            <RowItem icon="plus-circle" title="Add another account" subtitle="Google Workspace or another Gmail" rightElement={<Feather name="chevron-right" size={20} color={colors.border} />} />
           </View>
         </ScrollView>
       </SafeAreaView>

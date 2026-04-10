@@ -1,6 +1,6 @@
-# Sortify - Urgent Email App
+# Clairo - Urgent Email App
 
-Sortify is an Android application + Home Screen Widget that connects to your Gmail (or Outlook) account, filters out mundane "Important" emails, and highlights only **truly urgent** messages.
+Clairo is an Android application + Home Screen Widget that connects to your Gmail (or Outlook) account, filters out mundane "Important" emails, and highlights only **truly urgent** messages.
 
 ## Architecture
 This project is built using:
@@ -13,11 +13,11 @@ This project is built using:
   - `/src/main/java/com/sortify/provider` - Email integration
   - `/src/main/java/com/sortify/service` - Classification engine & syncing
 - `/mobile/` - React Native app
-  - `/android/` - Android native code with `SortifyWidgetProvider`
+  - `/android/` - Android native code with `ClairoWidgetProvider`
   - `/src/screens/` - React Native UI screens
 
 ## Zero-Cost MVP Considerations
-- Uses standard Spring Boot with H2 on the filesystem `(./data/sortifydb)` instead of a managed remote DB.
+- Uses standard Spring Boot with H2 on the filesystem `(./data/clairodb)` instead of a managed remote DB.
 - Categorization regex-engine executes locally within the JVM without any external ML service.
 - Gmail Developer App is free.
 
@@ -54,7 +54,7 @@ npx react-native run-android
 ### 5. Using the Widget
 - Go to the Android Emulator home screen.
 - Long press on empty space -> Widgets.
-- Find "Sortifymobile" -> Add the widget to your home screen.
+- Find "Clairo" -> Add the widget to your home screen.
 
 ## Privacy & Security
 Email snippets and sender details are persisted to the local H2 database strictly for displaying within the app and widget. Full email bodies are not fetched nor saved. OAuth tokens are stored but can be easily flushed or scoped-down via standard Google settings.

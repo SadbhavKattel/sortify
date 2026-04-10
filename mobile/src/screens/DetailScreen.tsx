@@ -8,85 +8,129 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, NativeModules } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
+import { Feather } from '@expo/vector-icons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { useTheme } from '../ThemeContext';
-
-function extractKeyInfo(email: any): { label: string; value: string }[] {
-  const info: { label: string; value: string }[] = [];
-  if (email.receivedAt) {
-    const d = new Date(email.receivedAt), now = new Date();
-    const h = Math.floor((now.getTime() - d.getTime()) / 3600000);
-    const days = Math.floor(h / 24);
-    info.push({ label: 'Received', value: days > 0 ? `${days}d ago` : h > 0 ? `${h}h ago` : 'Just now' });
-  }
-  if (email.urgencyReasons) info.push({ label: 'Category', value: email.urgencyReasons });
-  const full = `${email.subject || ''} ${email.snippet || ''}`;
-  const money = full.match(/\$[\d,]+\.?\d*/); if (money) info.push({ label: 'Amount', value: money[0] });
-  const time = full.match(/\d{1,2}:\d{2}\s*(AM|PM|am|pm)/); if (time) info.push({ label: 'Time', value: time[0] });
-  const date = full.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}/i); if (date) info.push({ label: 'Date', value: date[0] });
-  const card = full.match(/ending in \d{4}/i); if (card) info.push({ label: 'Card', value: card[0] });
-  if (email.isUnread) info.push({ label: 'Status', value: 'Unread' });
-  return info;
-}
 
 export default function DetailScreen({ route, navigation }: any) {
-  const { email } = route.params;
-  const { colors } = useTheme();
-  const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  const { email: paramEmail, id } = route.params || {};
+  
+  // If we came from a deep link, we might only have an ID
+  const email = paramEmail || { id, subject: "Loading External Email...", senderName: "Clairo", urgencyReasons: "Important", priorityLevel: "High" };
+  
+  const [fontsLoaded] = useFonts({ 
+    Inter_400Regular, 
+    Inter_500Medium, 
+    Inter_600SemiBold, 
+    Inter_700Bold 
+  });
+
   if (!fontsLoaded) return null;
-  const keyInfo = extractKeyInfo(email);
+
+  const getColors = (reason: string) => {
+    if (reason === 'Alert') return { dot: '#EA4335', bg: '#FCE8E6', text: '#C5221F' }; // Red
+    if (reason === 'Deadline') return { dot: '#EA4335', bg: '#FCE8E6', text: '#C5221F' }; // Red for deadline UI match
+    return { dot: '#6658EA', bg: '#EFEAFC', text: '#5944D7' }; // Purple
+  };
+
+  const c = getColors(email.urgencyReasons);
+
+  const openGmail = () => {
+    // Open Gmail web URL; if Gmail app is installed, OS might handle the deep link.
+    const url = `https://mail.google.com/mail/u/0/#inbox/${email.id}`;
+    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+  };
+
+  // Build the Key Information rows dynamically
+  const keyInfo = [
+    { label: 'Received', value: email.receivedAt, color: '#1a1a1a' },
+    { label: 'Category', value: email.urgencyReasons, color: c.text },
+  ];
+  if (email.urgencyReasons === 'Deadline') {
+    keyInfo.push({ label: 'Due date detected', value: 'Today', color: c.text });
+    keyInfo.push({ label: 'Action needed', value: 'Requires attention', color: c.text });
+  } else {
+    keyInfo.push({ label: 'Priority', value: email.priorityLevel, color: c.text });
+  }
+
+  // Create a 2-line summary from the snippet
+  const summarySentences = email.snippet?.split('. ').slice(0, 2).join('. ') + (email.snippet?.includes('.') ? '.' : '');
 
   return (
-    <View style={[styles.bg, { backgroundColor: colors.bg }]}>
+    <View style={styles.bg}>
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backWrap}>
-            <BlurView intensity={30} tint={colors.blurTint} style={[styles.backBlur, { backgroundColor: colors.blurBg }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 8, height: 8, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: colors.text, transform: [{ rotate: '45deg' }], marginRight: 6 }} />
-                <Text style={[styles.backText, { color: colors.text }]}>Back</Text>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.8}>
+              <Feather name="chevron-left" size={18} color="#1a1a1a" />
+            </TouchableOpacity>
+            <Text style={styles.headerText}>Inbox</Text>
+          </View>
 
-          <Text style={[styles.subject, { color: colors.text }]}>{email.subject}</Text>
+          {/* Top Pill */}
+          <View style={[styles.pill, { backgroundColor: c.bg }]}>
+            <View style={[styles.pillDot, { backgroundColor: c.dot }]} />
+            <Text style={[styles.pillText, { color: c.text }]}>{email.urgencyReasons} · {email.priorityLevel === 'High' ? 'High Priority' : 'Attention needed'}</Text>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.subject}>{email.subject}</Text>
+
+          {/* Sender Row */}
           <View style={styles.senderRow}>
-            <View style={[styles.avatar, { backgroundColor: colors.accent + '20' }]}>
-              <Text style={[styles.avatarText, { color: colors.accent }]}>{email.senderName?.charAt(0) || '?'}</Text>
+            <View style={[styles.avatar, { backgroundColor: c.dot }]}>
+              <Text style={styles.avatarText}>{email.senderName?.charAt(0) || '?'}</Text>
             </View>
-            <View>
-              <Text style={[styles.senderName, { color: colors.text }]}>{email.senderName}</Text>
-              <Text style={[styles.senderDate, { color: colors.subtext }]}>{email.receivedAt?.substring(0, 10)}</Text>
+            <View style={styles.senderTextCol}>
+              <Text style={styles.senderName}>{email.senderName}</Text>
+              <Text style={styles.senderEmail}>{email.senderName.toLowerCase().replace(/\s/g, '')}@gmail.com</Text>
+            </View>
+            <View style={styles.dateChip}>
+              <Text style={styles.dateChipText}>{email.receivedAt?.split(' ').slice(0, 2).join(' ')}</Text>
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, { color: colors.accent }]}>Key Information</Text>
-          <BlurView intensity={25} tint={colors.blurTint} style={[styles.infoCard, { borderColor: colors.border }]}>
-            {keyInfo.map((item, idx) => (
-              <View key={idx} style={[styles.infoRow, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
-                <Text style={[styles.infoLabel, { color: colors.subtext }]}>{item.label}</Text>
-                <Text style={[styles.infoValue, { color: item.label === 'Amount' || item.label === 'Time' ? colors.accent : colors.text }]}>{item.value}</Text>
+          {/* KEY INFORMATION */}
+          <Text style={styles.sectionTitle}>KEY INFORMATION</Text>
+          <View style={styles.tableCard}>
+            {keyInfo.map((row, idx) => (
+              <View key={idx} style={[styles.tableRow, idx > 0 && styles.tableRowBorder]}>
+                <Text style={styles.tableLabel}>{row.label}</Text>
+                <Text style={[styles.tableValue, { color: row.color }]}>{row.value}</Text>
               </View>
             ))}
-          </BlurView>
+          </View>
 
-          <BlurView intensity={20} tint={colors.blurTint} style={[styles.reasonCard, { borderLeftColor: colors.accent }]}>
-            <Text style={[styles.reasonTitle, { color: colors.subtext }]}>Why this is urgent</Text>
-            <Text style={[styles.reasonText, { color: colors.text }]}>{email.urgencyReasons}</Text>
-          </BlurView>
+          {/* AI SUMMARY */}
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.aiIconWrap}>
+              <Feather name="zap" size={10} color="#fff" />
+            </View>
+            <Text style={styles.aiTitleText}>AI SUMMARY</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryText} numberOfLines={2}>
+              {summarySentences || email.subject}
+            </Text>
+          </View>
 
-          <BlurView intensity={20} tint={colors.blurTint} style={[styles.bodyCard, { borderColor: colors.border }]}>
-            <Text style={[styles.bodyText, { color: colors.text }]}>{email.snippet || "No preview available..."}</Text>
-          </BlurView>
+          {/* WHY CLAIRO FLAGGED THIS */}
+          <View style={styles.flagCard}>
+            <View style={styles.flagCardInner}>
+              <Text style={styles.flagTitle}>WHY CLAIRO FLAGGED THIS</Text>
+              <Text style={styles.flagText}>Clairo detected a {email.urgencyReasons.toLowerCase()} context in the subject line and ranked this as urgent. High priority emails are always surfaced first.</Text>
+            </View>
+          </View>
 
-          <TouchableOpacity style={styles.actionBtn} onPress={() => { const threadId = email.deepLinkUrl?.split('/').pop() || email.id; NativeModules.WidgetData?.openGmailMessage(threadId); }} activeOpacity={0.8}>
-            <BlurView intensity={40} tint={colors.blurTint} style={[styles.actionBlur, { backgroundColor: colors.accent + '18' }]}>
-              <Text style={[styles.actionText, { color: colors.accent }]}>Open Original Email</Text>
-            </BlurView>
+          {/* Open Original Email Button */}
+          <TouchableOpacity style={styles.actionBtn} onPress={openGmail} activeOpacity={0.8}>
+            <Feather name="external-link" size={16} color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={styles.actionText}>Open original email</Text>
           </TouchableOpacity>
+
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -94,27 +138,47 @@ export default function DetailScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1 }, container: { flex: 1 }, scroll: { padding: 24 },
-  backWrap: { alignSelf: 'flex-start', borderRadius: 20, overflow: 'hidden', marginBottom: 30 },
-  backBlur: { paddingHorizontal: 16, paddingVertical: 10 },
-  backText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
-  subject: { fontFamily: 'Inter_700Bold', fontSize: 28, marginBottom: 24, letterSpacing: -0.8, lineHeight: 36 },
-  senderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
-  avatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  avatarText: { fontFamily: 'Inter_700Bold', fontSize: 20 },
-  senderName: { fontFamily: 'Inter_600SemiBold', fontSize: 18, marginBottom: 2 },
-  senderDate: { fontFamily: 'Inter_400Regular', fontSize: 14 },
-  sectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12 },
-  infoCard: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, marginBottom: 24 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
-  infoLabel: { fontFamily: 'Inter_500Medium', fontSize: 14 },
-  infoValue: { fontFamily: 'Inter_700Bold', fontSize: 15 },
-  reasonCard: { padding: 20, borderRadius: 20, marginBottom: 24, borderLeftWidth: 4, overflow: 'hidden' },
-  reasonTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
-  reasonText: { fontFamily: 'Inter_500Medium', fontSize: 16 },
-  bodyCard: { padding: 24, borderRadius: 24, minHeight: 120, marginBottom: 30, overflow: 'hidden', borderWidth: 1 },
-  bodyText: { fontFamily: 'Inter_400Regular', fontSize: 17, lineHeight: 26 },
-  actionBtn: { borderRadius: 30, overflow: 'hidden', marginBottom: 40 },
-  actionBlur: { paddingVertical: 18, alignItems: 'center' },
-  actionText: { fontFamily: 'Inter_600SemiBold', fontSize: 18 },
+  bg: { flex: 1, backgroundColor: '#ffffff' },
+  container: { flex: 1 },
+  scroll: { padding: 24, paddingBottom: 60 },
+  
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+  backBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f3f2ee', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  headerText: { fontFamily: 'Inter_500Medium', fontSize: 16, color: '#8e8e8e' },
+
+  pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginBottom: 16 },
+  pillDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+  pillText: { fontFamily: 'Inter_500Medium', fontSize: 12 },
+
+  subject: { fontFamily: 'Inter_600SemiBold', fontSize: 24, color: '#1a1a1a', letterSpacing: -0.5, lineHeight: 32, marginBottom: 20 },
+  
+  senderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
+  avatar: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarText: { fontFamily: 'Inter_500Medium', fontSize: 18, color: '#ffffff' },
+  senderTextCol: { flex: 1 },
+  senderName: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#1a1a1a', marginBottom: 2 },
+  senderEmail: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#a0a0a0' },
+  dateChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#f3f2ee' },
+  dateChipText: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#8e8e8e' },
+
+  sectionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: '#a0a0a0', letterSpacing: 1.5, marginBottom: 12 },
+  tableCard: { borderWidth: 1, borderColor: '#ececec', borderRadius: 16, marginBottom: 24, backgroundColor: '#ffffff' },
+  tableRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center' },
+  tableRowBorder: { borderTopWidth: 1, borderTopColor: '#ececec' },
+  tableLabel: { fontFamily: 'Inter_400Regular', fontSize: 14, color: '#a0a0a0' },
+  tableValue: { fontFamily: 'Inter_500Medium', fontSize: 14 },
+
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  aiIconWrap: { width: 20, height: 20, borderRadius: 6, backgroundColor: '#6658EA', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  aiTitleText: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: '#6658EA', letterSpacing: 1.5 },
+  summaryCard: { borderWidth: 1, borderColor: '#ececec', borderRadius: 16, padding: 16, marginBottom: 24, backgroundColor: '#ffffff' },
+  summaryText: { fontFamily: 'Inter_400Regular', fontSize: 15, color: '#444444', lineHeight: 22 },
+
+  flagCard: { backgroundColor: '#FCE8E6', borderRadius: 12, marginBottom: 32, overflow: 'hidden' },
+  flagCardInner: { borderLeftWidth: 4, borderLeftColor: '#EA4335', padding: 16 },
+  flagTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1.5, color: '#C5221F', marginBottom: 8 },
+  flagText: { fontFamily: 'Inter_500Medium', fontSize: 14, color: '#9b1b18', lineHeight: 20 },
+
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EA4335', paddingVertical: 16, borderRadius: 12 },
+  actionText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#ffffff' },
 });

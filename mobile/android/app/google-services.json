@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "963735205913",
+    "project_id": "sortify-72653",
+    "storage_bucket": "sortify-72653.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:963735205913:android:eec5cf28f5b0aa0bc59288",
+        "android_client_info": {
+          "package_name": "com.katte.sortify"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "963735205913-6fs4ckgq57ihdtg23ps8nms1jole4hvm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.katte.sortify",
+            "certificate_hash": "b11eb9c4a73b9372f6b42b9a88e3ae835cb35a8c"
+          }
+        },
+        {
+          "client_id": "963735205913-7s1qvkrfb3dt9ggvcpid21at647big73.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9O07ITqip8BZYWvZwhQW378lnOVyg8Ks"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "963735205913-7s1qvkrfb3dt9ggvcpid21at647big73.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

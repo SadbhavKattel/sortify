@@ -31,9 +31,14 @@ export default function OnboardingScreen({ navigation }: any) {
     // Use the Android client from google-services.json for native sign-in.
     // We only need Gmail access tokens in-app, not a server auth code.
     GoogleSignin.configure({
-      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+      scopes: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/calendar.events'
+      ],
       offlineAccess: false,
     });
+    // Check play services once on mount to avoid delay during button press
+    GoogleSignin.hasPlayServices().catch(() => {});
   }, []);
 
   /**
@@ -45,16 +50,7 @@ export default function OnboardingScreen({ navigation }: any) {
    */
   const handleGoogleSignIn = async () => {
     try {
-      await GoogleSignin.hasPlayServices();
-      try {
-        await GoogleSignin.signOut(); // Clear any stuck sessions before attempting
-      } catch (e) {}
       await GoogleSignin.signIn();
-      const tokens = await GoogleSignin.getTokens();
-
-      // Try to sync with backend (non-blocking — app still works if backend is down)
-      try { await fetch('http://10.0.2.2:8080/api/providers/oauth2/callback/gmail/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken: tokens.accessToken }) }); } catch (e) {}
-
       navigation.replace('Feed');
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) return;

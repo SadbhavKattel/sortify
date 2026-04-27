@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, NativeModules, ScrollView, TextInput } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -7,6 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useTheme } from '../ThemeContext';
 import { analyzeEmailImportance, analyzeEmailDeadline, analyzeEmailAlert } from '../utils/emailAnalyzer';
+import { processEmailsForAI } from '../utils/aiScoring';
+import { createGoogleCalendarEvent } from '../utils/calendarService';
 
 export default function FeedScreen({ navigation }: any) {
   const { colors, theme } = useTheme();
@@ -16,6 +19,7 @@ export default function FeedScreen({ navigation }: any) {
   const [activeTab, setActiveTab] = useState('Important');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -47,9 +51,9 @@ export default function FeedScreen({ navigation }: any) {
         accessToken = tokens.accessToken;
       }
       
-      const query = encodeURIComponent('in:inbox category:primary is:important -category:promotions -category:social');
+      const query = encodeURIComponent('in:inbox -category:promotions -category:social');
       const listResponse = await fetch(
-        `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${query}`, 
+        `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${query}`, 
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       const listData = await listResponse.json();
@@ -60,78 +64,113 @@ export default function FeedScreen({ navigation }: any) {
         return;
       }
 
-      const emailPromises = listData.messages.map(async (msg: any) => {
-        const detailResp = await fetch(
-          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        const detailData = await detailResp.json();
-        
-        let subject = '';
-        let senderName = '';
-        let dateHeader = '';
-        
-        if (detailData.payload && detailData.payload.headers) {
-          detailData.payload.headers.forEach((h: any) => {
-            if (h.name === 'Subject') subject = h.value;
-            if (h.name === 'From') senderName = h.value.split('<')[0].trim();
-            if (h.name === 'Date') dateHeader = h.value;
-          });
-        }
-        
-        const impResult = analyzeEmailImportance(subject, senderName, detailData.snippet || '');
-        const deadlineResult = analyzeEmailDeadline(subject, detailData.snippet || '');
-        const alertResult = analyzeEmailAlert(subject, detailData.snippet || '');
-        
-        // Find highest priority category among the three to label the email
-        let currScore = -999;
-        let urgencyReasons = 'Important';
-        let priorityLevel = 'Med';
-        
-        if (alertResult.surface && alertResult.score > currScore) {
-          currScore = alertResult.score;
-          urgencyReasons = 'Alert';
-          priorityLevel = alertResult.priority === 'high' ? 'High' : 'Medium';
-        }
-        if (deadlineResult.surface && deadlineResult.score > currScore) {
-          currScore = deadlineResult.score;
-          urgencyReasons = 'Deadline';
-          priorityLevel = deadlineResult.priority === 'high' ? 'High' : (deadlineResult.score > 30 ? 'Due' : 'Low');
-        }
-        if (impResult.surface && impResult.score > currScore) {
-          currScore = impResult.score;
-          urgencyReasons = 'Important';
-          priorityLevel = impResult.priority === 'high' ? 'High' : 'Med';
-        }
+      // DISMISS LOADING SPINNER IMMEDIATELY
+      // The user now lands on the page instantly. The emails will pop in as they load.
+      setLoading(false);
 
-        // If none surfaced uniquely, drop the email
-        if (!alertResult.surface && !deadlineResult.surface && !impResult.surface) {
+      const syncWidget = (emailsToSync: any[]) => {
+        try {
+          const highEmails = emailsToSync.filter((e: any) => e.priorityLevel === 'High');
+          const widgetEmails = [...highEmails].sort((a, b) => {
+            if (b.aiScore !== a.aiScore) return b.aiScore - a.aiScore;
+            if (a.urgencyReasons === 'Alert' && b.urgencyReasons !== 'Alert') return -1;
+            if (b.urgencyReasons === 'Alert' && a.urgencyReasons !== 'Alert') return 1;
+            if (a.urgencyReasons === 'Deadline' && b.urgencyReasons !== 'Deadline') return -1;
+            if (b.urgencyReasons === 'Deadline' && a.urgencyReasons !== 'Deadline') return 1;
+            return 0;
+          });
+          NativeModules.WidgetData?.setWidgetData(JSON.stringify(widgetEmails.slice(0, 3)));
+        } catch (e) {
+          console.log("Failed to sync widgets", e);
+        }
+      };
+
+      const fetchEmailDetails = async (msg: any) => {
+        try {
+          const detailResp = await fetch(
+            `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          const detailData = await detailResp.json();
+          
+          let subject = '';
+          let senderName = '';
+          let senderEmail = '';
+          let dateHeader = '';
+          
+          if (detailData.payload && detailData.payload.headers) {
+            detailData.payload.headers.forEach((h: any) => {
+              if (h.name === 'Subject') subject = h.value;
+              if (h.name === 'From') {
+                const fromValue = h.value;
+                senderName = fromValue.split('<')[0].replace(/"/g, '').trim();
+                const emailMatch = fromValue.match(/<([^>]+)>/);
+                senderEmail = emailMatch ? emailMatch[1] : fromValue;
+                if (!senderName) senderName = senderEmail;
+              }
+              if (h.name === 'Date') dateHeader = h.value;
+            });
+          }
+          
+          const impResult = analyzeEmailImportance(subject, senderName, detailData.snippet || '');
+          const deadlineResult = analyzeEmailDeadline(subject, detailData.snippet || '');
+          const alertResult = analyzeEmailAlert(subject, detailData.snippet || '');
+          
+          let urgencyReasons = 'Important';
+          let priorityLevel = 'Med';
+          
+          if (alertResult.surface) {
+            urgencyReasons = 'Alert';
+            priorityLevel = alertResult.priority === 'high' ? 'High' : 'Medium';
+          } else if (deadlineResult.surface) {
+            urgencyReasons = 'Deadline';
+            priorityLevel = deadlineResult.priority === 'high' ? 'High' : (deadlineResult.score > 30 ? 'Due' : 'Low');
+          } else if (impResult.surface) {
+            urgencyReasons = 'Important';
+            priorityLevel = impResult.priority === 'high' ? 'High' : 'Med';
+          }
+
+          const heuristicSurface = alertResult.surface || deadlineResult.surface || impResult.surface;
+          let receivedAt = dateHeader ? dateHeader.split(' ').slice(1, 4).join(' ') : 'Unknown';
+
+          return {
+            id: msg.id,
+            subject: subject || 'No Subject',
+            senderName: senderName || 'Unknown Sender',
+            urgencyReasons,
+            priorityLevel,
+            snippet: detailData.snippet || '',
+            receivedAt,
+            isUnread: !storedReadIds.has(msg.id.toString()),
+            senderEmail,
+            heuristicSurface
+          };
+        } catch (e) {
           return null;
         }
+      };
+
+      // Fetch all details in the background (Non-blocking)
+      Promise.all(listData.messages.map(fetchEmailDetails)).then((detailResults) => {
+        const allFetchedEmails = detailResults.filter(Boolean) as any[];
         
-        let receivedAt = dateHeader ? dateHeader.split(' ').slice(1, 4).join(' ') : 'Unknown';
+        setEmails(allFetchedEmails.filter((e: any) => e.heuristicSurface));
+        syncWidget(allFetchedEmails);
 
-        return {
-          id: msg.id,
-          subject: subject || 'No Subject',
-          senderName: senderName || 'Unknown Sender',
-          urgencyReasons,
-          priorityLevel,
-          snippet: detailData.snippet || '',
-          receivedAt,
-          isUnread: !storedReadIds.has(msg.id.toString())
-        };
+        // Feature 1 — AI Email Importance Scoring (Run in background)
+        processEmailsForAI(allFetchedEmails, (scoredEmailsProgress) => {
+          setEmails(scoredEmailsProgress.filter((e: any) => e.heuristicSurface));
+          syncWidget(scoredEmailsProgress);
+        }).then(async (scoredEmails) => {
+          setEmails(scoredEmails.filter((e: any) => e.heuristicSurface));
+          for (const email of scoredEmails) {
+            if (email.aiScore === 5 && email.aiEvent) {
+              await createGoogleCalendarEvent(accessToken, email.id, email.aiEvent);
+            }
+          }
+          syncWidget(scoredEmails);
+        }).catch(err => console.log('Background AI processing error:', err));
       });
-
-      const fetchedEmails = (await Promise.all(emailPromises)).filter(Boolean);
-      setEmails(fetchedEmails as any[]);
-
-      try {
-        const importantEmails = fetchedEmails.filter((e: any) => e.urgencyReasons === 'Important');
-        NativeModules.WidgetData?.setWidgetData(JSON.stringify(importantEmails.slice(0, 3)));
-      } catch (e) {
-        console.log("Failed to sync widgets", e);
-      }
       
     } catch (error: any) {
       console.log('Error fetching real emails:', error);
@@ -176,7 +215,29 @@ export default function FeedScreen({ navigation }: any) {
     return matchTab && matchSearch;
   });
 
-  const tabs = ['Important', 'Deadlines', 'Alerts'];
+  const tabs = ['Important', 'Deadlines', 'Alerts', 'Calendar'];
+
+  const getMarkedDates = () => {
+    const marks: any = {};
+    emails.forEach(email => {
+      if (email.aiEvent && email.aiEvent.date) {
+        marks[email.aiEvent.date] = { 
+          marked: true, 
+          dotColor: '#EA4335', // Red dot to clearly indicate an event/deadline
+        };
+      }
+    });
+    
+    if (selectedDate) {
+      marks[selectedDate] = {
+        ...marks[selectedDate],
+        selected: true,
+        selectedColor: colors.text,
+        selectedTextColor: colors.bg
+      };
+    }
+    return marks;
+  };
 
   const getColors = (urgencyReason: string) => {
     if (urgencyReason === 'Alert') return { dot: '#EA4335', pillBg: '#FCE8E6', pillText: '#C5221F' };
@@ -298,6 +359,50 @@ export default function FeedScreen({ navigation }: any) {
         {/* Email List */}
         {loading && emails.length === 0 ? (
           <View style={styles.loadingWrap}><ActivityIndicator size="large" color={colors.text} /></View>
+        ) : activeTab === 'Calendar' ? (
+          <View style={{ flex: 1 }}>
+            <Calendar
+              minDate={new Date().toISOString().split('T')[0]}
+              maxDate={new Date(new Date().setMonth(new Date().getMonth() + 2)).toISOString().split('T')[0]}
+              onDayPress={(day: any) => setSelectedDate(day.dateString)}
+              markedDates={getMarkedDates()}
+              theme={{
+                backgroundColor: colors.bg,
+                calendarBackground: colors.bg,
+                textSectionTitleColor: '#b6c1cd',
+                selectedDayBackgroundColor: colors.text,
+                selectedDayTextColor: colors.bg,
+                todayTextColor: '#6658EA',
+                dayTextColor: '#1a1a1a',
+                textDisabledColor: '#d9e1e8',
+                dotColor: '#EA4335',
+                selectedDotColor: '#ffffff',
+                arrowColor: '#6658EA',
+                disabledArrowColor: '#d9e1e8',
+                monthTextColor: colors.text,
+                indicatorColor: 'blue',
+                textDayFontFamily: 'Inter_400Regular',
+                textMonthFontFamily: 'Inter_600SemiBold',
+                textDayHeaderFontFamily: 'Inter_500Medium',
+                textDayFontSize: 14,
+                textMonthFontSize: 16,
+                textDayHeaderFontSize: 12
+              }}
+            />
+            <View style={{ flex: 1, backgroundColor: colors.bg }}>
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, marginHorizontal: 24, marginVertical: 16, color: colors.subtext }}>
+                EVENTS ON {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
+              </Text>
+              <FlatList 
+                data={emails.filter(e => e.aiEvent && e.aiEvent.date === selectedDate)} 
+                renderItem={renderItem} 
+                keyExtractor={item => item.id.toString()} 
+                contentContainerStyle={styles.listContent} 
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: colors.subtext, fontFamily: 'Inter_400Regular' }}>No events scheduled for this day.</Text>}
+              />
+            </View>
+          </View>
         ) : (
           <FlatList 
             data={filteredEmails} 

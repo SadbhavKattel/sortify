@@ -100,10 +100,10 @@ export function analyzeEmailDeadline(subject: string, snippet: string): { surfac
     reason = 'Trial or subscription renewing soon';
   }
   
-  if (combined.match(/(due by|due on|expires|deadline|last day|act by|respond by|before)/)) {
-    score += 60;
+  if (combined.match(/(due by|due on|expires|deadline|last day|act by|respond by|before|exam|meeting|appointment|interview)/)) {
+    score += 75;
     category = 'appointment';
-    reason = 'Explicit deadline detected';
+    reason = 'Explicit deadline or event detected';
   } else if (combined.match(/(reminder|upcoming|important update)/)) {
     score += 55;
     category = 'appointment';
